@@ -16,7 +16,7 @@ Everything runs in your browser. Your netlist is never uploaded anywhere.
 - Exports **SVG**, **PDF** (vector) and **PNG** (600 dpi).
 - Converts text to outlines by default, so Ω, µ and the font look the same on every computer.
 - Lets you fix the layout by hand: drag a part to move it, or double-click it to change its name or value.
-- Lets you build a circuit without typing a netlist, using the **Add a part** form.
+- Lets you build a circuit without a netlist in **Draw** mode: drag parts from a palette onto a grid, click pins to wire them, and add lines, circles, triangles, rectangles and text. Undo and redo are included.
 - Explains problems in plain words, for example "Line 4: R2 has no value", and clicking a message highlights that line.
 
 ## How to use it
