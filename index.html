@@ -73,6 +73,10 @@ details summary{cursor:pointer;color:var(--muted);font-size:13px}
 .pop input,.help input[type=text]{font:inherit;color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:4px;padding:6px 8px}
 .hit{fill:transparent;cursor:grab}.hit:hover{fill:#d9480f14}
 .selbox{fill:none;stroke:var(--sel);stroke-dasharray:.5 .3}
+.check{display:grid;gap:3px;font-size:13px;border:1px solid var(--line);border-radius:4px;padding:8px 10px;background:var(--panel)}
+.check[hidden]{display:none}
+.check .ck{display:flex;gap:8px}.check .ok{color:#1a7f37}.check .no{color:var(--warn)}.check .bad{color:#c62828}
+.check h4{margin:0 0 4px;font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--muted)}
 .tabs{display:grid;grid-template-columns:1fr 1fr;gap:0}
 .tabs button{border-radius:0;padding:8px;font-weight:500;color:var(--muted)}
 .tabs button:first-child{border-radius:4px 0 0 4px}.tabs button:last-child{border-radius:0 4px 4px 0;border-left:0}
@@ -107,6 +111,18 @@ details summary{cursor:pointer;color:var(--muted);font-size:13px}
       <label for="ex">Example circuit</label>
       <div class="bar"><select id="ex" style="flex:1"></select><button id="bNew" type="button" title="Start an empty drawing">New</button></div>
     </div>
+    <details class="help" id="figbox">
+      <summary>Figures and project (several circuits)</summary>
+      <div class="stack" style="margin-top:10px">
+        <div class="bar"><select id="figSel" style="flex:1" aria-label="Figure"></select><button id="figAdd" type="button">Add figure</button></div>
+        <div><label for="figTitle">Figure name (used in the file name)</label><input id="figTitle" type="text" style="width:100%"></div>
+        <div class="bar"><button id="figDel" type="button">Delete figure</button><button id="projSave" type="button">Save project</button><button id="projOpen" type="button">Open project</button></div>
+        <div class="bar"><button id="projPdf" type="button" class="pri">Export all as one PDF</button></div>
+        <input type="file" id="projFile" accept=".json,application/json" hidden>
+        <p class="note">A project file keeps every figure with its settings. The PDF has one page per figure, each page exactly the size of its figure.</p>
+        <p class="note" id="figMsg" aria-live="polite"></p>
+      </div>
+    </details>
     <div class="tabs" role="tablist" aria-label="How to make the circuit">
       <button id="tabNet" role="tab" aria-selected="true" type="button">Netlist</button>
       <button id="tabDraw" role="tab" aria-selected="false" type="button">Draw</button>
@@ -151,15 +167,22 @@ details summary{cursor:pointer;color:var(--muted);font-size:13px}
         <div id="tools" class="bar">
           <button type="button" data-tool="sel" class="on">Select</button>
           <button type="button" data-tool="line">Line</button>
+          <button type="button" data-tool="arrow">Arrow</button>
           <button type="button" data-tool="circ">Circle</button>
           <button type="button" data-tool="tri">Triangle</button>
           <button type="button" data-tool="rect">Rectangle</button>
           <button type="button" data-tool="text">Text</button>
         </div>
         <div class="bar" style="margin-top:8px"><input id="tText" type="text" placeholder="Text to place" style="flex:1;min-width:0" autocomplete="off"><label class="inl"><input type="checkbox" id="tDash"> Dashed</label></div>
+        <div class="bar" style="margin-top:8px"><label class="inl"><input type="checkbox" id="tSnap" checked> Snap shapes to grid</label><button type="button" id="bPanel" title="Add (a), (b), ... labels for multi-panel figures">Panel label</button><button type="button" id="bDup" title="Duplicate the selected parts (Ctrl+D)">Duplicate</button></div>
       </div>
-      <p class="note"><b>To wire:</b> click the small circle at the end of a part, then click the end of another part. Click a pin and use Ground or Name net to label it. Double-click a part to change its value. Your drawing is saved as a netlist: open the Netlist tab to see or copy it.</p>
+      <p class="note"><b>To wire:</b> click the small circle at the end of a part, then click the end of another part. Drag on empty space to select several parts, or Shift+click. Click a pin and use Ground or Name net to label it. Double-click a part to change its value. Your drawing is saved as a netlist: open the Netlist tab to see or copy it.</p>
       <p class="note" id="dMsg" aria-live="polite"></p>
+    </div>
+    <div>
+      <label for="style">Journal style (sets font, text and line size)</label>
+      <select id="style"><option value="">Custom</option><option value="ieee">IEEE: Times, 8 pt text, 0.75 pt lines</option><option value="els">Elsevier: Arial, 8 pt text, 0.75 pt lines</option><option value="spr">Springer: Arial, 8 pt text, 0.75 pt lines</option><option value="nat">Nature-style: Arial, 7 pt text, 0.5 pt lines</option><option value="the">Thesis: Times, 10 pt text, 0.75 pt lines</option></select>
+      <p class="note">These are typical values, not official rules. Check your journal's author guidelines.</p>
     </div>
     <div class="row">
       <div><label for="paper">Page width</label><select id="paper"></select></div>
@@ -192,7 +215,7 @@ details summary{cursor:pointer;color:var(--muted);font-size:13px}
       <button class="pri" id="bSvg" disabled>Download SVG</button>
       <button id="bPdf" disabled>Download PDF</button>
       <button id="bPng" disabled>Download PNG</button>
-      <button id="bCopy">Copy SVG</button>
+      <button id="bCopy">Copy SVG</button><button id="bShare" title="Copy a link that opens this circuit">Share link</button>
       <button id="bUndo" disabled title="Undo (Ctrl+Z)">Undo</button><button id="bRedo" disabled title="Redo (Ctrl+Y)">Redo</button>
       <button id="bZm" hidden title="Zoom out">&minus;</button><button id="bZp" hidden title="Zoom in">+</button>
       <span class="sp"></span>
@@ -210,10 +233,15 @@ details summary{cursor:pointer;color:var(--muted);font-size:13px}
       <input id="pbName" type="text" placeholder="net name, e.g. out" style="width:9.5em" autocomplete="off" autocapitalize="off" spellcheck="false"><button id="pbNameOk" type="button">Name net</button>
       <button id="pbDisc" type="button">Disconnect pin</button><button id="pbDone" type="button">Done</button>
     </div>
+    <div class="sel" id="multibar" hidden>
+      <b>Selected parts</b><button id="mRow" type="button">Same row</button><button id="mCol" type="button">Same column</button><button id="mEvenH" type="button">Space evenly across</button><button id="mEvenV" type="button">Space evenly down</button><button id="mRot" type="button">Rotate</button><button id="mDup" type="button">Duplicate</button><button id="mDel" type="button">Delete</button>
+    </div>
     <div class="sel" id="shpbar" hidden>
       <b>Shape</b><button id="shDel" type="button">Delete</button><button id="shDash" type="button">Dashed on/off</button><button id="shRot" type="button">Rotate 90&deg;</button><button id="shFlip" type="button">Flip</button>
     </div>
     <div class="status" id="st"></div>
+    <div class="check" id="check" aria-live="polite"></div>
+    <input id="shareBox" type="text" readonly hidden style="width:100%" aria-label="Share link">
     <p class="note">Drag any part to move it, or double-click it to change its name or value. Positions are stored as <code>*@</code> comment lines at the end of the netlist, so they come back when you paste it again.</p>
     <div class="pop" id="pop" hidden role="dialog" aria-label="Edit part">
       <div class="row"><div><label for="pName">Name</label><input id="pName" type="text" style="width:100%"></div>
@@ -249,27 +277,28 @@ function fmtNum(v,unit){
   for(const [f,p] of P){ if(a>=f*0.9999){ const x=parseFloat((v/f).toPrecision(3)); return x+' '+p+unit; } }
   return v+' '+unit;
 }
-const UNIT={R:'Ω',C:'F',L:'H',V:'V',I:'A'};
+const UNIT={P:'Ω',R:'Ω',C:'F',L:'H',V:'V',I:'A'};
 
 function parseNetlist(text){
-  const out={comps:[],models:{},hints:{},warnings:[],title:''};
+  const out={comps:[],models:{},hints:{},warnings:[],title:'',couples:[]};
   const raw=text.replace(/\r/g,'').split('\n'); const lines=[];
   raw.forEach((ln,i)=>{
     const hm=/^\s*\*@\s*(\S+)\s*(.*)$/.exec(ln);
     if(hm){ const h={}; hm[2].split(/\s+/).forEach(kv=>{const p=kv.split('='); if(p.length===2&&p[1]!=='') h[p[0]]=parseFloat(p[1]);}); out.hints[hm[1].toLowerCase()]=h; return; }
+    const pm=/;\s*pot\s+(\S+)/i.exec(ln), pl=/;\s*pol\b/i.test(ln);
     ln=ln.replace(/[;$].*$/,'');
     if(/^\s*\+/.test(ln) && lines.length){ lines[lines.length-1].t+=' '+ln.replace(/^\s*\+/,''); return; }
     if(/^\s*\*/.test(ln) || !ln.trim()) return;
-    lines.push({t:ln.trim(),n:i+1});
+    lines.push({t:ln.trim(),n:i+1,pot:pm&&pm[1],pol:pl});
   });
-  const isElem=l=>/^[RCLDQMVIX][\w.$:]*\s+\S+\s+\S+/i.test(l);
+  const isElem=l=>/^[RCLDQMVIXJSK][\w.$:]*\s+\S+\s+\S+/i.test(l);
   if(lines.length && !isElem(lines[0].t) && lines[0].t[0]!=='.'){
     if(/^[RCLDQMVIX]\d/i.test(lines[0].t)) out.warnings.push({line:lines[0].n,msg:'This line looks like a part but is incomplete, so it was read as the title: '+lines[0].t});
     out.title=lines.shift().t;
   }
   const warn=(n,m)=>out.warnings.push({line:n,msg:m});
-  const NEED={R:[3,'two nodes and a value, for example R1 in out 10k'],C:[3,'two nodes and a value, for example C1 out 0 100n'],L:[3,'two nodes and a value, for example L1 a b 10u'],D:[3,'two nodes (anode, cathode) and a model, for example D1 a k 1N4148'],V:[3,'two nodes (positive, negative) and a value, for example V1 in 0 5'],I:[3,'two nodes (positive, negative) and a value, for example I1 a 0 1m'],Q:[4,'three nodes (collector, base, emitter) and a model, for example Q1 c b e 2N3904'],M:[4,'three nodes (drain, gate, source) and a model, for example M1 d g 0 0 NMOS']};
-  for(const {t:l,n} of lines){
+  const NEED={J:[4,'three nodes and a model, for example J1 d g s 2N5457'],S:[3,'two nodes, for example S1 a b ctrl 0 SW'],K:[4,'two inductor names and a coupling, for example K1 L1 L2 0.99'],R:[3,'two nodes and a value, for example R1 in out 10k'],C:[3,'two nodes and a value, for example C1 out 0 100n'],L:[3,'two nodes and a value, for example L1 a b 10u'],D:[3,'two nodes (anode, cathode) and a model, for example D1 a k 1N4148'],V:[3,'two nodes (positive, negative) and a value, for example V1 in 0 5'],I:[3,'two nodes (positive, negative) and a value, for example I1 a 0 1m'],Q:[4,'three nodes (collector, base, emitter) and a model, for example Q1 c b e 2N3904'],M:[4,'three nodes (drain, gate, source) and a model, for example M1 d g 0 0 NMOS']};
+  for(const {t:l,n,pot,pol} of lines){
     const t=l.split(/\s+/);
     if(t[0][0]==='.'){
       if(/^\.model$/i.test(t[0]) && t[2]) out.models[t[1].toLowerCase()]=t[2].replace(/\(.*/,'').toLowerCase();
@@ -280,7 +309,11 @@ function parseNetlist(text){
     if('RCL'.includes(k)&&t.length<4) warn(n,name+' has no value. It is drawn without one.');
     const plain=t.slice(1).filter(x=>!x.includes('='));
     let c=null;
-    if('RCL'.includes(k)){ c={type:k,name,nodes:[t[1],t[2]],val:parseVal(t[3]),raw:t[3]}; }
+    if(k==='R'&&pot){ c={type:'P',name,nodes:[t[1],t[2],pot],val:parseVal(t[3]),raw:t[3]}; }
+    else if('RCL'.includes(k)){ c={type:k,name,nodes:[t[1],t[2]],val:parseVal(t[3]),raw:t[3],polar:k==='C'&&pol}; }
+    else if(k==='J'){ c={type:'J',name,nodes:[t[1],t[2],t[3]],model:plain[plain.length-1]||''}; }
+    else if(k==='S'){ c={type:'W',name,nodes:[t[1],t[2]],model:''}; }
+    else if(k==='K'){ out.couples.push({name,a:t[1],b:t[2],k:t[3],line:n}); continue; }
     else if(k==='D'){ c={type:'D',name,nodes:[t[1],t[2]],model:t[3]||''}; }
     else if(k==='V'||k==='I'){
       const rest=t.slice(3).join(' '); const ac=/sin|pulse|ac\b|exp|pwl|sffm/i.test(rest);
@@ -294,7 +327,8 @@ function parseNetlist(text){
       const nn=plain.slice(0,-1);
       if(nn.length===3) c={type:'OA',name,nodes:[nn[0],nn[1],nn[2]],model:plain[plain.length-1],pw:false};
       else if(nn.length===5) c={type:'OA',name,nodes:[nn[0],nn[1],nn[4],nn[2],nn[3]],model:plain[plain.length-1],pw:true};
-      else warn(n,name+' has '+nn.length+' pins. Only op-amps with 3 pins (in+ in- out) or 5 pins (in+ in- v+ v- out) can be drawn, so it was left out.');
+      else if(nn.length>=2) c={type:'IC',name,nodes:nn,model:plain[plain.length-1]};
+      else warn(n,name+' has too few pins to draw, so it was left out.');
     }
     else warn(n,name+' is a type of part this tool cannot draw yet ('+k+'), so it was left out.');
     if(c){ c.line=n; out.comps.push(c); }
@@ -314,8 +348,17 @@ function buildCircuit(P,opts){
     if(c.type==='Q'){ o.pinNets=[nn[1],nn[0],nn[2]]; o.pol=(/pnp/.test(mt)||(!mt&&/pnp|3906|2907|bc55|bc56|bc32|bc30|tip4|tip3[0-9]\b|2n4403/.test(m)))?'p':'n'; }
     else if(c.type==='M'){ o.pinNets=[nn[1],nn[0],nn[2]]; o.pol=(/pmos|pch/.test(mt)||(!mt&&/pmos|pch|^irf9|^irfr9|bss84|zvp|^fdn3|fqp\d*p/.test(m)))?'p':'n'; }
     else if(c.type==='D'){ o.pinNets=nn; o.kind=/led/.test(m)?'led':(/zen|bzx|bzt|^1n47\d\d|^1n52\d\d|^1n53\d\d/.test(m)?'zener':'d'); }
+    else if(c.type==='J'){ o.pinNets=[nn[1],nn[0],nn[2]]; o.pol=(/pjf|pjfet/.test(mt)||(!mt&&/pjf|2n546\d|j17[5-7]/.test(m)))?'p':'n'; }
+    else if(c.type==='P'){ o.pinNets=[nn[2],nn[0],nn[1]]; }
     else o.pinNets=nn;
     comps.push(o);
+  }
+  // transformers: K lines couple two inductors into one 4-pin symbol
+  for(const k of (P.couples||[])){
+    const ca=comps.find(c=>c.type==='L'&&c.name.toLowerCase()===String(k.a).toLowerCase()&&!c.hidden), cb=comps.find(c=>c.type==='L'&&c.name.toLowerCase()===String(k.b).toLowerCase()&&!c.hidden);
+    if(!ca||!cb||ca===cb) continue;
+    ca.hidden=cb.hidden=true;
+    comps.push({type:'T',name:k.name,nodes:[...ca.nodes,...cb.nodes],pinNets:[...ca.pinNets,...cb.pinNets],line:k.line,hidden:false,o:{rot:0,flip:false,swap:false},cx:0,cy:0,side:1,model:'',val:null,raw:k.k,parts:[ca.name,cb.name],refs:[{n:ca.name,t:1},{n:ca.name,t:2},{n:cb.name,t:1},{n:cb.name,t:2}]});
   }
   // hide DC supplies
   if(opts.rails) for(const c of comps){
@@ -333,9 +376,9 @@ function buildCircuit(P,opts){
   // value/label strings
   for(const c of vis){
     c.vtxt='';
-    if('RCL'.includes(c.type)) c.vtxt=c.val!=null?fmtNum(c.val,UNIT[c.type]):(c.raw||'');
+    if('RCLP'.includes(c.type)&&c.type.length===1) c.vtxt=c.val!=null?fmtNum(c.val,UNIT[c.type]):(c.raw||'');
     else if(c.type==='V'||c.type==='I') c.vtxt=c.val!=null?fmtNum(c.val,UNIT[c.type]):'';
-    else if(c.type==='Q'||c.type==='M'||c.type==='D'||c.type==='OA') c.vtxt=c.model||'';
+    else if('QMJD'.includes(c.type)&&c.type.length===1||c.type==='OA'||c.type==='IC') c.vtxt=c.model||'';
   }
   return {comps:vis,nets,all:comps,warnings};
 }
@@ -348,6 +391,8 @@ function arrowHead(tx,ty,dx,dy,len=0.5,w=0.22){
   const bx=tx-dx*len, by=ty-dy*len;
   return `<polygon fill="#000" stroke="none" points="${f2(tx)},${f2(ty)} ${f2(bx+nx*w)},${f2(by+ny*w)} ${f2(bx-nx*w)},${f2(by-ny*w)}"/>`;
 }
+const covOf=c=>{const v=SYM[c.type].cover; return typeof v==='function'?v(c):v;};
+const blkOf=c=>{const v=SYM[c.type].block; return typeof v==='function'?v(c):v;};
 const two=(a,b,ao,bo)=>[{x:-2,y:0,ox:-1,oy:0},{x:2,y:0,ox:1,oy:0}];
 const SYM={
   R:{pins:()=>two(), cover:[-2,-1,2,1], block:[-1,0,1,0], vert:true,
@@ -355,7 +400,9 @@ const SYM={
       ? Ln(-2,0,-1.2,0)+Ln(1.2,0,2,0)+`<rect x="-1.2" y="-0.42" width="2.4" height="0.84"/>`
       : Ln(-2,0,-1.2,0)+Pa('M-1.2,0 L-1,-0.5 L-0.6,0.5 L-0.2,-0.5 L0.2,0.5 L0.6,-0.5 L1,0.5 L1.2,0')+Ln(1.2,0,2,0)},
   C:{pins:()=>two(), cover:[-2,-1,2,1], block:[-1,0,1,0], vert:true,
-    draw:()=>Ln(-2,0,-0.25,0)+Ln(0.25,0,2,0)+Ln(-0.25,-0.9,-0.25,0.9)+Ln(0.25,-0.9,0.25,0.9)},
+    draw:(c)=>c.polar
+      ? Ln(-2,0,-0.25,0)+Ln(0.38,0,2,0)+Ln(-0.25,-0.9,-0.25,0.9)+Pa('M0.1,-0.9 Q0.66,0 0.1,0.9')+Ln(-1.0,-0.75,-0.6,-0.75)+Ln(-0.8,-0.95,-0.8,-0.55)
+      : Ln(-2,0,-0.25,0)+Ln(0.25,0,2,0)+Ln(-0.25,-0.9,-0.25,0.9)+Ln(0.25,-0.9,0.25,0.9)},
   L:{pins:()=>two(), cover:[-2,-1,2,1], block:[-1,0,1,0], vert:true,
     draw:()=>Ln(-2,0,-1.2,0)+Pa('M-1.2,0 a0.3,0.3 0 0 1 0.6,0 a0.3,0.3 0 0 1 0.6,0 a0.3,0.3 0 0 1 0.6,0 a0.3,0.3 0 0 1 0.6,0')+Ln(1.2,0,2,0)},
   D:{pins:()=>two(), cover:[-2,-1,2,1], block:[-1,0,1,0], vert:true,
@@ -376,9 +423,10 @@ const SYM={
       return s;}},
   M:{pins:()=>[{x:-2,y:0,ox:-1,oy:0},{x:1,y:-2,ox:0,oy:-1},{x:1,y:2,ox:0,oy:1}], cover:[-2,-2,1,2], block:[-2,-2,1,2],
     draw:(c)=>{
-      let s=Ln(-2,0,-0.7,0)+Ln(-0.7,-1.2,-0.7,1.2)+Ln(-0.3,-1.2,-0.3,-0.6)+Ln(-0.3,-0.3,-0.3,0.3)+Ln(-0.3,0.6,-0.3,1.2)
-        +Pa('M1,-2 L1,-0.9 L-0.3,-0.9')+Pa('M1,2 L1,0.9 L-0.3,0.9')+Pa('M-0.3,0 L1,0 L1,0.9')+Ln(1,0,1,2)+`<circle cx="1" cy="0" r="0.12" fill="#000" stroke="none"/>`;
-      s+= c.pol==='p' ? arrowHead(0.6,0,1,0,0.4,0.18) : arrowHead(-0.3,0,-1,0,0.4,0.18);
+      const p=c.pol==='p';
+      let s=(p?Ln(-2,0,-1.2,0)+`<circle cx="-0.95" cy="0" r="0.25"/>`:Ln(-2,0,-0.7,0))+Ln(-0.7,-1.2,-0.7,1.2)
+        +Ln(-0.3,-1.2,-0.3,-0.6)+Ln(-0.3,-0.3,-0.3,0.3)+Ln(-0.3,0.6,-0.3,1.2)
+        +Pa('M1,-2 L1,-0.9 L-0.3,-0.9')+Pa('M1,2 L1,0.9 L-0.3,0.9');
       return s;}},
   OA:{pins:(c)=>{
       const sw=c.o.swap, p=[{x:-2,y:sw?1:-1,ox:-1,oy:0},{x:-2,y:sw?-1:1,ox:-1,oy:0},{x:2,y:0,ox:1,oy:0}];
@@ -390,16 +438,42 @@ const SYM={
       s+=Ln(-1.2,yp,-0.8,yp)+Ln(-1,yp-0.2,-1,yp+0.2)+Ln(-1.2,yn,-0.8,yn);
       if(c.pw) s+=Ln(0,-1,0,-2)+Ln(0,1,0,2);
       return s;}},
+
+  W:{pins:()=>two(), cover:[-2,-1,2,1], block:[-1,0,1,0], vert:true,
+    draw:()=>Ln(-2,0,-0.9,0)+Ln(0.9,0,2,0)+`<circle cx="-0.9" cy="0" r="0.13"/><circle cx="0.9" cy="0" r="0.13"/>`+Ln(-0.9,0,0.75,-0.85)},
+  P:{pins:()=>[{x:-2,y:0,ox:-1,oy:0},{x:1,y:-2,ox:0,oy:-1},{x:1,y:2,ox:0,oy:1}], cover:[-2,-2,1,2], block:[-2,-2,1,2],
+    draw:(c,st)=>{
+      let s=Ln(-2,0,0.1,0)+arrowHead(0.55,0,1,0,0.45,0.2)+Ln(1,-2,1,-1.3)+Ln(1,1.3,1,2);
+      s+= st&&st.rbox ? `<rect x="0.58" y="-1.3" width="0.84" height="2.6"/>` : Pa('M1,-1.3 L1.45,-1.05 L0.55,-0.6 L1.45,-0.15 L0.55,0.3 L1.45,0.75 L0.55,1.0 L1,1.3');
+      return s;}},
+  J:{pins:()=>[{x:-2,y:0,ox:-1,oy:0},{x:1,y:-2,ox:0,oy:-1},{x:1,y:2,ox:0,oy:1}], cover:[-2,-2,1,2], block:[-2,-2,1,2],
+    draw:(c)=>{
+      let s=Ln(-2,0,-0.3,0)+Ln(-0.3,-1.2,-0.3,1.2)+Pa('M1,-2 L1,-0.9 L-0.3,-0.9')+Pa('M1,2 L1,0.9 L-0.3,0.9');
+      s+= c.pol==='p' ? arrowHead(-1.3,0,-1,0,0.45,0.2) : arrowHead(-0.4,0,1,0,0.45,0.2);
+      return s;}},
+  T:{pins:()=>[{x:-2,y:-2,ox:-1,oy:0},{x:-2,y:2,ox:-1,oy:0},{x:2,y:-2,ox:1,oy:0},{x:2,y:2,ox:1,oy:0}], cover:[-2,-2,2,2], block:[-2,-2,2,2],
+    draw:()=>{
+      const coil=(x,sw)=>{ let d=`M${x},-1.4`; for(let i=0;i<4;i++) d+=` a0.35,0.35 0 0 ${sw} 0,0.7`; return Pa(d); };
+      return Pa('M-2,-2 L-0.6,-2 L-0.6,-1.4')+Pa('M-2,2 L-0.6,2 L-0.6,1.4')+Pa('M2,-2 L0.6,-2 L0.6,-1.4')+Pa('M2,2 L0.6,2 L0.6,1.4')
+        +coil(-0.6,0)+coil(0.6,1)+Ln(-0.15,-1.5,-0.15,1.5)+Ln(0.15,-1.5,0.15,1.5);}},
+  IC:{pins:(c)=>icPins(c), cover:(c)=>{const r=icRows(c); return [-2,-r,2,r];}, block:(c)=>{const r=icRows(c); return [-2,-r,2,r];},
+    draw:(c)=>{ const r=icRows(c); let s=`<rect x="-1.5" y="${-r}" width="3" height="${2*r}"/>`; icPins(c).forEach(p=>{ s+=Ln(p.x,p.y,p.x<0?-1.5:1.5,p.y); }); return s; }},
   PORT:{pins:()=>[{x:0,y:0,ox:-1,oy:0}], cover:[0,-1,3,1], block:[1,0,1,0],
     draw:()=>`<circle cx="0.35" cy="0" r="0.35" fill="#fff"/>`}
 };
+function icN(c){ return (c.nodes||[]).length||4; }
+function icRows(c){ return Math.ceil(icN(c)/2); }
+function icPins(c){ const n=icN(c), nl=Math.ceil(n/2), nr=n-nl, p=[];
+  for(let j=0;j<nl;j++) p.push({x:-2,y:-(nl-1)+2*j,ox:-1,oy:0});
+  for(let j=0;j<nr;j++) p.push({x:2,y:(nr-1)-2*j,ox:1,oy:0}); return p; }
 const ORIS={
+  one:[{rot:0,flip:false,swap:false}],
   two:[{rot:0},{rot:90},{rot:180},{rot:270}].map(o=>({rot:o.rot,flip:false,swap:false})),
   act:[{rot:0,flip:false,swap:false},{rot:0,flip:true,swap:false}],
   oa:[{rot:0,flip:false,swap:false},{rot:0,flip:false,swap:true}],
   port:[{rot:0,flip:false,swap:false},{rot:180,flip:false,swap:false}]
 };
-function oriList(c){ return c.type==='Q'||c.type==='M'?ORIS.act : c.type==='OA'?ORIS.oa : c.type==='PORT'?ORIS.port : ORIS.two; }
+function oriList(c){ return 'QMJP'.includes(c.type)&&c.type.length===1?ORIS.act : c.type==='T'||c.type==='IC'?ORIS.one : c.type==='OA'?ORIS.oa : c.type==='PORT'?ORIS.port : ORIS.two; }
 function xf(o,x,y){
   if(o.flip) y=-y;
   switch(o.rot){case 0:return[x,y];case 90:return[-y,x];case 180:return[-x,-y];default:return[y,-x];}
@@ -417,7 +491,7 @@ function rectW(c,r){ // rotated rect of local [x0,y0,x1,y1] in world cells
 }
 function isVert(c){ return SYM[c.type].vert && (c.o.rot===90||c.o.rot===270) !== (c.type==='V'||c.type==='I'); }
 function coverCells(c){
-  const r=rectW(c,SYM[c.type].cover);
+  const r=rectW(c,covOf(c));
   if(SYM[c.type].vert && isVert(c)) { if(c.side<0) r[0]-=1; else r[2]+=1; }
   const out=[]; for(let x=r[0];x<=r[2];x++) for(let y=r[1];y<=r[3];y++) out.push(x+','+y); return out;
 }
@@ -441,7 +515,7 @@ function autoPlace(circ,opts){
   function seedPlace(c){
     const x=0,y=anchors.size||occ.size?maxY()+10:0; c.cx=x; c.cy=y;
     let best=null,bs=-1;
-    const two='RCLDVI'.includes(c.type);
+    const two='RCLDVIW'.includes(c.type);
     for(const o of oriList(c)){ c.o={...o}; let s=scoreOri(c);
       if(two){ const pk=c.pinNets.map(kind); const bothSig=pk.every(k=>k==='sig'); if(bothSig&&(isVert(c)))s-=2; if(c.type==='V'||c.type==='I'){ if(pk[1]==='gnd'&&c.o.rot===0)s+=1; } }
       if(s>bs){bs=s;best={...o};} }
@@ -450,7 +524,7 @@ function autoPlace(circ,opts){
   function series(c,nk,A){
     const ni=c.pinNets.indexOf(nk), fi=1-ni;
     let dx=1,dy=0; const ow=A.owner;
-    if('RCLD'.includes(ow.type)&&isVert(ow)){ dx=A.dx; dy=A.dy; }
+    if('RCLDW'.includes(ow.type)&&isVert(ow)){ dx=A.dx; dy=A.dy; }
     const px=-dy, py=dx;
     for(const k of OFFS){
       for(const o of oriList(c)){
@@ -490,11 +564,12 @@ function autoPlace(circ,opts){
     c.o=best; const r=rel(c,idx);
     let sx,sy;
     if(c.type==='OA'){ if(idx===2){sx=-3;sy=0;} else {sx=3;sy=0;} }
+    else if(c.type==='T'||c.type==='IC'){ sx=r[0]<0?3:-3; sy=0; }
     else if(idx===0){sx=3;sy=0;} else {sx=0; sy=r[1]<0?2:-2;}
     for(const k of OFFS){
       c.cx=AA.x+sx-r[0]; c.cy=AA.y+sy-r[1]+(sx? k:0); if(!sx) c.cx+=k;
       if(free(c)){commit(c);return;}
-      if(k===0&&c.type!=='OA'&&idx===0){ // second transistor on a shared base: mirror it to the left
+      if(k===0&&'QMJP'.includes(c.type)&&c.type.length===1&&idx===0){ // second transistor on a shared base: mirror it to the left
         const keep={...c.o}; c.o={rot:180,flip:!best.flip,swap:false}; const mr=rel(c,0);
         c.cx=AA.x-sx-mr[0]; c.cy=AA.y-mr[1];
         if(free(c)){commit(c);return;}
@@ -520,7 +595,7 @@ function autoPlace(circ,opts){
   function process(nk){
     const A=anchors.get(nk);
     const list=comps.filter(c=>!c.placed&&c.pinNets.includes(nk));
-    const act=list.filter(c=>'QMO'.includes(c.type[0])&&(c.type==='Q'||c.type==='M'||c.type==='OA'));
+    const act=list.filter(c=>['Q','M','OA','J','P','T','IC'].includes(c.type));
     act.forEach(c=>{ if(!c.placed) active(c,nk,A); });
     const two=list.filter(c=>!c.placed&&c.pinNets.length===2);
     const ser=[],sh=[];
@@ -577,11 +652,11 @@ function routeAll(circ){
   if(!comps.length) return {fixed:[],labels:[],grounds:[],nets:[],dots:[],failed:0,edges:[]};
   let x0=1e9,y0=1e9,x1=-1e9,y1=-1e9;
   const pw=new Map();
-  comps.forEach(c=>{ pw.set(c,pinsW(c)); const r=rectW(c,SYM[c.type].cover); x0=Math.min(x0,r[0]);y0=Math.min(y0,r[1]);x1=Math.max(x1,r[2]);y1=Math.max(y1,r[3]); });
+  comps.forEach(c=>{ pw.set(c,pinsW(c)); const r=rectW(c,covOf(c)); x0=Math.min(x0,r[0]);y0=Math.min(y0,r[1]);x1=Math.max(x1,r[2]);y1=Math.max(y1,r[3]); });
   x0-=12;y0-=14;x1+=12;y1+=14;
   const W=x1-x0+1,H=y1-y0+1, id=(x,y)=>(y-y0)*W+(x-x0);
   const blocked=new Uint8Array(W*H);
-  comps.forEach(c=>{ const r=rectW(c,SYM[c.type].block); for(let x=r[0];x<=r[2];x++)for(let y=r[1];y<=r[3];y++) blocked[id(x,y)]=1; pw.get(c).forEach(p=>blocked[id(p.x,p.y)]=1); });
+  comps.forEach(c=>{ const r=rectW(c,blkOf(c)); for(let x=r[0];x<=r[2];x++)for(let y=r[1];y<=r[3];y++) blocked[id(x,y)]=1; pw.get(c).forEach(p=>blocked[id(p.x,p.y)]=1); });
   const hE=new Int16Array(W*H).fill(-1), vE=new Int16Array(W*H).fill(-1);
   const uses=new Map(); // cell -> [{net,mask}]
   const cellsOf=[]; const edgesOf=[]; let nid=0;
@@ -600,7 +675,7 @@ function routeAll(circ){
   const out={fixed:[],labels:[],grounds:[],nets:[],dots:[],failed:0};
   const runSpecials=()=>{
   // ground & rails: one bus per net placed beyond all parts, pins routed to it around obstacles
-  const covers=comps.map(c=>rectW(c,SYM[c.type].cover));
+  const covers=comps.map(c=>rectW(c,covOf(c)));
   const gBottom=Math.max(...covers.map(r=>r[3]))+2, gTop=Math.min(...covers.map(r=>r[1]))-2;
   const hasGnd=[...nets.values()].some(n=>n.kind==='gnd'&&n.pins.length);
   const specials=[];
@@ -610,7 +685,7 @@ function routeAll(circ){
     if(!pins.length) continue;
     const nn=newNet(); const xs=pins.map(p=>p.x);
     let down=true;
-    if(n.kind==='rail'){ const dn=pins.filter(p=>p.oy>0).length, up=pins.filter(p=>p.oy<0).length; down=dn>up||(dn===up&&n.value<0); }
+    if(n.kind==='rail'){ const dn=pins.filter(p=>p.oy>0).length, up=pins.filter(p=>p.oy<0).length; down=n.value<0?true:(n.value>0?dn>up+1:dn>up); }
     const by=n.kind==='gnd'?gBottom:(down?gBottom+(hasGnd?3:0):gTop);
     let mnx=Math.min(...xs), mxx=Math.max(...xs);
     if(n.kind==='rail'&&mnx===mxx){mnx-=1;mxx+=1;}
@@ -724,11 +799,13 @@ function labelsFor(c,o){
   const add=(x,y,t,a,net,plain)=>{ if(t) L.push({x,y,t,a,net,plain}); };
   const showN=o.names, showV=o.vals;
   if(c.type==='PORT'){ const l=c.o.rot===180; const nm=/^(in|out|input|output)$/i.test(c.name)?'V_'+c.name.toLowerCase().replace('input','in').replace('output','out'):c.name; add(c.cx+(l?-1:1),c.cy+0.3,nm,l?'end':'start',true); return L; }
-  if('RCLDVI'.includes(c.type)){
+  if('RCLDVIW'.includes(c.type)){
     if(!isVert(c)){ const up=sd>0; const hc=c.type==='C'?1.15:(c.kind==='led'?1.8:0.9); const ny=c.cy+(up?-hc:hc+0.75), vy=c.cy+(up?hc+0.75:-hc); if(showN)add(c.cx,ny,c.name,'middle'); if(showV)add(c.cx,vy,c.vtxt,'middle',false,true); }
     else { const xo=(c.type==='V'||c.type==='I'?1.4:1.0)*sd; const a=sd>0?'start':'end'; if(showN)add(c.cx+xo,c.cy+n0,c.name,a); if(showV)add(c.cx+xo,c.cy+v0,c.vtxt,a,false,true); }
-  } else if(c.type==='Q'||c.type==='M'){ const flip=c.o.flip; const mr=c.o.rot===180; const lx=c.cx+(mr?-1.6:1.6), la=mr?'end':'start'; if(showN)add(lx,c.cy+n0,c.name,la); if(showV)add(lx,c.cy+v0,c.vtxt,la,false,true); }
+  } else if(c.type==='Q'||c.type==='M'||c.type==='J'||c.type==='P'){ const flip=c.o.flip; const mr=c.o.rot===180; const lx=c.cx+(mr?-1.6:1.6), la=mr?'end':'start'; if(showN)add(lx,c.cy+n0,c.name,la); if(showV)add(lx,c.cy+v0,c.vtxt,la,false,true); }
   else if(c.type==='OA'){ if(showN)add(c.cx+0.6,c.cy-2.3,c.name,'start'); }
+  else if(c.type==='T'){ if(showN)add(c.cx,c.cy-2.4,c.name,'middle'); }
+  else if(c.type==='IC'){ const r=icRows(c); if(showN)add(c.cx,c.cy-r-0.4,c.name,'middle'); if(showV)add(c.cx,c.cy+0.3,c.vtxt,'middle',false,true); }
   return L;
 }
 function labelBoxes(c,o,fs){
@@ -737,9 +814,9 @@ function labelBoxes(c,o,fs){
 }
 function autoSides(circ,R,s,o){
   const fs=o.fsMM/s; o.fsG=fs; const segs=mergeEdges(R.edges), hit=(a,b)=>a[2]>=b[0]&&a[0]<=b[2]&&a[3]>=b[1]&&a[1]<=b[3];
-  const covers=new Map(circ.comps.map(c=>[c,rectW(c,SYM[c.type].cover)]));
+  const covers=new Map(circ.comps.map(c=>[c,rectW(c,covOf(c))]));
   const placed=[]; const movable=[];
-  circ.comps.forEach(c=>{ c.eff=c.side; if('RCLDVI'.includes(c.type)&&isVert(c)&&!c.userSide) movable.push(c); else labelBoxes(c,o,fs).forEach(b=>placed.push(b)); });
+  circ.comps.forEach(c=>{ c.eff=c.side; if('RCLDVIW'.includes(c.type)&&isVert(c)&&!c.userSide) movable.push(c); else labelBoxes(c,o,fs).forEach(b=>placed.push(b)); });
   movable.forEach(c=>{
     let best=1,bc=1e9,bb=[];
     for(const sd of [1,-1]){
@@ -875,7 +952,7 @@ function render(){
   else {
   svg.setAttribute('viewBox',`0 0 ${f2(W)} ${f2(H)}`);
   svg.setAttribute('width',`${f2(W)}mm`); svg.setAttribute('height',`${f2(H)}mm`);
-  let ov=''; S.circ.comps.forEach(c=>{ if(c.isPort) return; const r=rectW(c,SYM[c.type].cover); const sel=S.sel===c.name;
+  let ov=''; S.circ.comps.forEach(c=>{ if(c.isPort) return; const r=rectW(c,covOf(c)); const sel=S.sel===c.name;
     ov+=`<rect class="hit" data-c="${esc(c.name)}" x="${r[0]-0.5}" y="${r[1]-0.5}" width="${r[2]-r[0]+1}" height="${r[3]-r[1]+1}"/>`;
     if(sel) ov+=`<rect class="selbox" stroke-width="${f2(0.3/s)}" x="${r[0]-0.5}" y="${r[1]-0.5}" width="${r[2]-r[0]+1}" height="${r[3]-r[1]+1}"/>`; });
   svg.innerHTML=`${bgr}<g id="root" transform="translate(${f2(tx)} ${f2(ty)}) scale(${s.toFixed(5)})">${art}<g id="ov">${ov}</g></g>`;
@@ -894,6 +971,7 @@ function render(){
   if(fsPt<7) st.push(`<span class="w">Text is ${fsPt} pt at print size. Many journals ask for 7 to 8 pt or more, so check your journal's author guidelines.</span>`);
   if(lwPt<0.5) st.push(`<span class="w">Lines of ${lwPt} pt are thin. Journals set their own minimum line weight, often between 0.25 and 0.5 pt.</span>`);
   renderIssues();
+  renderCheck(o,s);
   $('st').innerHTML=st.join('');
   $('code').value=S.svgStr;
   $('bSvg').disabled=$('bPng').disabled=$('bPdf').disabled=!S.circ.comps.length;
@@ -946,7 +1024,7 @@ $('bReset').onclick=()=>{ const c=cname(); if(!c) return; delete S.hints[c.name.
 let dl=null;
 (async()=>{ try{ dl=window.claude&&window.claude.use?await window.claude.use('downloads'):null; }catch(e){dl=null;} })();
 function flash(btn,t){ const o=btn.textContent; btn.textContent=t; setTimeout(()=>btn.textContent=o,1600); }
-function fileName(ext){ const t=(S.parsed&&S.parsed.title||'schematic').replace(/^\W+/,'').replace(/[^\w]+/g,'-').toLowerCase().replace(/^-|-$/g,'')||'schematic'; return t+'.'+ext; }
+function fileName(ext){ const t=(S.figName||(S.parsed&&S.parsed.title)||'schematic').replace(/^\W+/,'').replace(/[^\w]+/g,'-').toLowerCase().replace(/^-|-$/g,'')||'schematic'; return t+'.'+ext; }
 function browserDownload(name,data){
   const type=/\.svg$/.test(name)?'image/svg+xml':/\.pdf$/.test(name)?'application/pdf':/\.png$/.test(name)?'image/png':'application/octet-stream';
   const blob=data instanceof Blob?data:new Blob([data],{type});
@@ -1004,26 +1082,28 @@ function insertLine(line,extra){
 }
 function modelIdxs(t){ const a=[]; t.forEach((x,i)=>{ if(i>0&&!x.includes('=')) a.push(i); }); return a; }
 function getValueRaw(c,t){
-  if('RCL'.includes(c.type)) return t[3]||'';
+  if('RCLP'.includes(c.type)&&c.type.length===1) return t[3]||'';
+  if(c.type==='T') return t[3]||'';
   if(c.type==='V'||c.type==='I') return t.slice(3).join(' ');
   if(c.type==='D') return t[3]||'';
   const a=modelIdxs(t);
-  if(c.type==='Q') return a.length>=4?t[a[a.length-1]]:'';
+  if(c.type==='Q'||c.type==='J') return a.length>=4?t[a[a.length-1]]:'';
   if(c.type==='M') return a.length>=5?t[a[4]]:(a.length===4?t[a[3]]:'');
-  if(c.type==='OA') return a.length>=4?t[a[a.length-1]]:'';
+  if(c.type==='OA'||c.type==='IC') return a.length>=4?t[a[a.length-1]]:'';
   return '';
 }
 function setValueRaw(c,t,v){
   v=v.trim();
-  if('RCL'.includes(c.type)||c.type==='D'){ t=t.slice(0,3).concat(v?[v]:[]); return t; }
+  const ci=t.findIndex(x=>x.startsWith(';')), tail=ci>=0?t.slice(ci):[]; const head=ci>=0?t.slice(0,ci):t;
+  if(('RCLP'.includes(c.type)&&c.type.length===1)||c.type==='D'||c.type==='T'){ return head.slice(0,3).concat(v?[v]:[]).concat(tail); }
   if(c.type==='V'||c.type==='I'){ return t.slice(0,3).concat(v?[v]:[]); }
   const a=modelIdxs(t); let mi=-1;
-  if(c.type==='Q'&&a.length>=4) mi=a[a.length-1]; else if(c.type==='M'&&a.length>=4) mi=a.length>=5?a[4]:a[3]; else if(c.type==='OA'&&a.length>=4) mi=a[a.length-1];
+  if(c.type==='Q'&&a.length>=4) mi=a[a.length-1]; else if(c.type==='M'&&a.length>=4) mi=a.length>=5?a[4]:a[3]; else if((c.type==='OA'||c.type==='IC'||c.type==='J')&&a.length>=4) mi=a[a.length-1];
   if(mi>=0){ if(v) t[mi]=v; else t.splice(mi,1); } else if(v) t.push(v);
   return t;
 }
-const TNAME={R:'resistor',C:'capacitor',L:'inductor',V:'voltage source',I:'current source',D:'diode',Q:'transistor',M:'MOSFET',OA:'op-amp'};
-const VLAB={R:'Resistance',C:'Capacitance',L:'Inductance',V:'Source value',I:'Source value',D:'Model',Q:'Model',M:'Model',OA:'Model'};
+const TNAME={R:'resistor',C:'capacitor',L:'inductor',V:'voltage source',I:'current source',D:'diode',Q:'transistor',M:'MOSFET',OA:'op-amp',P:'potentiometer',J:'JFET',W:'switch',T:'transformer',IC:'IC'};
+const VLAB={R:'Resistance',C:'Capacitance',L:'Inductance',V:'Source value',I:'Source value',D:'Model',Q:'Model',M:'Model',OA:'Model',P:'Resistance',J:'Model',W:'Model',T:'Coupling (k)',IC:'Model'};
 function openPop(name,x,y){
   const c=S.circ.comps.find(k=>k.name===name); if(!c||c.isPort) return;
   const ls=netLines(), i=lineIndexFor(ls,name); if(i<0) return;
@@ -1108,7 +1188,7 @@ $('bPdf').onclick=async()=>{
 };
 /* ===== Draw mode: shapes, netlist editing, editor view, history ===== */
 /* --- shapes (stored as "*# ..." comment lines in the netlist) --- */
-const NEED_PTS={line:4,rect:4,circ:3,tri:6};
+const NEED_PTS={arrow:4,line:4,rect:4,circ:3,tri:6};
 function parseShapes(text){
   const out=[];
   text.split('\n').forEach(l=>{
@@ -1134,6 +1214,7 @@ function shapesXml(shapes,o,fs){
     if(s.t==='text'){ g+=`<g fill="#000" stroke="none">${textXml(s.x,s.y,'middle',[{t:s.txt,size:fs,dy:0}],o)}</g>`; return; }
     const d=s.dash?` stroke-dasharray="0.5 0.35" stroke-linecap="butt"`:'', p=s.p;
     if(s.t==='line') g+=`<line x1="${f2(p[0])}" y1="${f2(p[1])}" x2="${f2(p[2])}" y2="${f2(p[3])}"${d}/>`;
+    else if(s.t==='arrow'){ g+=`<line x1="${f2(p[0])}" y1="${f2(p[1])}" x2="${f2(p[2])}" y2="${f2(p[3])}"${d}/>`; if(p[0]!==p[2]||p[1]!==p[3]) g+=arrowHead(p[2],p[3],p[2]-p[0],p[3]-p[1],0.7,0.28); }
     else if(s.t==='rect') g+=`<rect x="${f2(Math.min(p[0],p[2]))}" y="${f2(Math.min(p[1],p[3]))}" width="${f2(Math.abs(p[2]-p[0]))}" height="${f2(Math.abs(p[3]-p[1]))}"${d}/>`;
     else if(s.t==='circ') g+=`<circle cx="${f2(p[0])}" cy="${f2(p[1])}" r="${f2(p[2])}"${d}/>`;
     else if(s.t==='tri') g+=`<polygon points="${f2(p[0])},${f2(p[1])} ${f2(p[2])},${f2(p[3])} ${f2(p[4])},${f2(p[5])}"${d}/>`;
@@ -1153,18 +1234,26 @@ const DEFS={
   V:{pre:'V',n:2,val:'5'}, VAC:{pre:'V',n:2,val:'SIN(0 1 1k)'}, I:{pre:'I',n:2,val:'1m'},
   QN:{pre:'Q',n:3,val:'2N3904'}, QP:{pre:'Q',n:3,val:'2N3906',mod:'PNP'},
   MN:{pre:'M',n:3,val:'NMOS'}, MP:{pre:'M',n:3,val:'PMOS',mod:'PMOS'},
-  OA:{pre:'X',n:3,val:'OPAMP'}, OA5:{pre:'X',n:5,val:'OPAMP'}
+  OA:{pre:'X',n:3,val:'OPAMP'}, OA5:{pre:'X',n:5,val:'OPAMP'},
+  CP:{pre:'C',n:2,val:'10u'}, POT:{pre:'R',n:3,val:'10k'}, SW:{pre:'S',n:2,val:'SW'},
+  JN:{pre:'J',n:3,val:'2N5457'}, JP:{pre:'J',n:3,val:'2N5460',mod:'PJF'},
+  IC4:{pre:'X',n:4,val:'IC'}, IC8:{pre:'X',n:8,val:'IC'}, TR:{pre:'L',n:4,val:'10m'}
 };
-const TOK={R:[1,2],C:[1,2],L:[1,2],D:[1,2],V:[1,2],I:[1,2],Q:[2,1,3],M:[2,1,3]};
-function pinTok(c){ return c.type==='OA'?(c.pw?[1,2,5,3,4]:[1,2,3]):TOK[c.type]; }
+const TOK={R:[1,2],C:[1,2],L:[1,2],D:[1,2],V:[1,2],I:[1,2],Q:[2,1,3],M:[2,1,3],J:[2,1,3],W:[1,2]};
+const wiperIdx=t=>t.findIndex((x,i)=>i>0&&x.toLowerCase()==='pot')+1;
+function pinTok(c,t){ if(c.type==='OA') return c.pw?[1,2,5,3,4]:[1,2,3]; if(c.type==='IC') return c.nodes.map((_,i)=>i+1); if(c.type==='P') return [wiperIdx(t),1,2]; return TOK[c.type]; }
 function nodeIdx(t){
   const k=t[0][0].toUpperCase();
+  if(k==='K') return [];
+  if(k==='J') return [1,2,3];
+  if(k==='S') return [1,2,3,4];
+  if(k==='R'){ const w=wiperIdx(t); return w>0&&t[w]?[1,2,w]:[1,2]; }
   if(k==='X'){ const a=[]; for(let i=1;i<t.length;i++) if(!t[i].includes('=')) a.push(i); a.pop(); return a; }
   if(k==='M') return t.length>=5?[1,2,3,4]:[1,2,3];
   if(k==='Q') return [1,2,3];
   return [1,2];
 }
-const isElemLine=l=>/^\s*[RCLDQMVIX][\w.$:]*\s+\S/i.test(l);
+const isElemLine=l=>/^\s*[RCLDQMVIXJSK][\w.$:]*\s+\S/i.test(l);
 function freshNode(ls){ let m=0; ls.join('\n').replace(/\b_n(\d+)\b/g,(a,b)=>{ m=Math.max(m,+b); }); return '_n'+(m+1); }
 function renameNet(ls,key,to){ return ls.map(l=>{ if(!isElemLine(l)) return l; const t=l.trim().split(/\s+/); let ch=false; nodeIdx(t).forEach(i=>{ if(t[i].toLowerCase()===key){ t[i]=to; ch=true; } }); return ch?t.join(' '):l; }); }
 function insertBeforeMeta(ls,add){
@@ -1181,19 +1270,25 @@ function addPartAt(key,gx,gy){
   let line;
   if(d.pre==='M') line=`${name} ${f.join(' ')} ${f[2]} ${d.val}`;
   else if(d.pre==='X'&&d.n===3) line=`${name} ${f.join(' ')} ${d.val}`;
-  else if(d.pre==='X') line=`${name} ${f[0]} ${f[1]} ${f[3]} ${f[4]} ${f[2]} ${d.val}`;
+  else if(d.pre==='X'&&d.n===5) line=`${name} ${f[0]} ${f[1]} ${f[3]} ${f[4]} ${f[2]} ${d.val}`;
+  else if(key==='CP') line=`${name} ${f[0]} ${f[1]} ${d.val} ; pol`;
+  else if(key==='POT') line=`${name} ${f[0]} ${f[1]} ${d.val} ; pot ${f[2]}`;
+  else if(key==='SW') line=`${name} ${f[0]} ${f[1]} 0 0 SW`;
   else line=`${name} ${f.join(' ')} ${d.val}`;
-  const add=[line];
+  const add=[line]; let hname=name;
+  if(key==='TR'){ const n2=nextNameAvoid('L',[name]); const kn=nextNameAvoid('K',[]); add.length=0; add.push(`${name} ${f[0]} ${f[1]} ${d.val}`,`${n2} ${f[2]} ${f[3]} ${d.val}`,`${kn} ${name} ${n2} 0.99`); hname=kn; }
   if(d.mod&&!new RegExp('^\\s*\\.model\\s+'+d.val.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')+'\\s','im').test(ls.join('\n'))) add.push(`.model ${d.val} ${d.mod}`);
   ls=insertBeforeMeta(ls,add);
-  ls=ls.filter(l=>!/^\s*\*@\s*/.test(l)||true); ls.push(`*@ ${name} x=${Math.round(gx)} y=${Math.round(gy)} rot=0 flip=0 side=1`);
-  S.sel=name; commitText(ls); return name;
+  ls=ls.filter(l=>!/^\s*\*@\s*/.test(l)||true); ls.push(`*@ ${hname} x=${Math.round(gx)} y=${Math.round(gy)} rot=0 flip=0 side=1`);
+  S.sel=hname; commitText(ls); return hname;
 }
 function deleteComp(name){
-  freezeLayout(); let ls=netLines(); const i=lineIndexFor(ls,name); if(i>=0) ls.splice(i,1);
-  const re=new RegExp('^\\s*\\*@\\s*'+name.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')+'\\s','i'); ls=ls.filter(l=>!re.test(l));
+  freezeLayout(); let ls=netLines(); const cc=S.circ.comps.find(c=>c.name===name); const names=[name].concat(cc&&cc.parts?cc.parts:[]);
+  names.forEach(nm=>{ const i=lineIndexFor(ls,nm); if(i>=0) ls.splice(i,1); });
+  names.forEach(nm=>{ const re=new RegExp('^\\s*\\*@\\s*'+nm.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')+'\\s','i'); ls=ls.filter(l=>!re.test(l)); });
   S.sel=null; commitText(ls);
 }
+function nextNameAvoid(pre,avoid){ const used=new Set(netLines().map(l=>l.trim().split(/\s+/)[0].toLowerCase()).concat(avoid.map(a=>a.toLowerCase()))); let n=1; while(used.has((pre+n).toLowerCase())) n++; return pre+n; }
 function netOfPin(p){ const c=S.circ.comps.find(k=>k.name===p.c); const pw=pinsW(c)[p.i]; return {c,pw,key:pw.net,net:S.circ.nets.get(pw.net)}; }
 function connectPins(a,b){
   const A=netOfPin(a), B=netOfPin(b); if(A.key===B.key) return 'These pins are already on the same wire.';
@@ -1205,8 +1300,8 @@ function connectPins(a,b){
 }
 function disconnectPin(p){
   const {c,net}=netOfPin(p); if(net.pins.length<2&&net.kind==='sig') return 'This pin is not connected to anything.';
-  freezeLayout(); const ls=netLines(); const li=lineIndexFor(ls,c.name); if(li<0) return 'Could not find this part in the netlist.';
-  const t=ls[li].trim().split(/\s+/); const ti=pinTok(c)[p.i]; const old=t[ti].toLowerCase(); const nn=freshNode(ls);
+  freezeLayout(); const ls=netLines(); const ref=c.refs?c.refs[p.i]:{n:c.name,t:null}; const li=lineIndexFor(ls,ref.n); if(li<0) return 'Could not find this part in the netlist.';
+  const t=ls[li].trim().split(/\s+/); const ti=ref.t!=null?ref.t:pinTok(c,t)[p.i]; const old=t[ti].toLowerCase(); const nn=freshNode(ls);
   t[ti]=nn; if(c.type==='M'&&p.i===2&&t[4]&&t[4].toLowerCase()===old) t[4]=nn;
   ls[li]=t.join(' '); commitText(ls); return '';
 }
@@ -1224,13 +1319,37 @@ function histCheck(){
 }
 function histGo(d){ const j=H.i+d; if(j<0||j>=H.stack.length) return; H.i=j; $('net').value=H.stack[j]; S.sel=null; S.pinSel=null; S.shSel=-1; recompute(true); render(); updUndo(); }
 function updUndo(){ $('bUndo').disabled=H.i<=0; $('bRedo').disabled=H.i>=H.stack.length-1; }
+
+/* --- duplicate parts (keeps wiring between the copied parts, ground stays ground, other pins are left open) --- */
+function duplicateParts(names,dx,dy){
+  freezeLayout(); let ls=netLines(); const comps=names.map(n=>S.circ.comps.find(c=>c.name===n)).filter(c=>c&&!c.isPort); if(!comps.length) return [];
+  const cnt=new Map(); comps.forEach(c=>c.pinNets.forEach(k=>cnt.set(k,(cnt.get(k)||0)+1)));
+  const map=new Map(), used=[]; const fresh=()=>{ const f=freshNode(ls.concat([...map.values()])); return f; };
+  const newNames=[]; const out=[]; const hints=[]; const nameMap=new Map();
+  const nm=(pre)=>{ const x=nextNameAvoid(pre,used); used.push(x); return x; };
+  comps.forEach(c=>{ const all=[c.name].concat(c.parts||[]); all.forEach(n=>nameMap.set(n.toLowerCase(),nm(n[0].toUpperCase()))); });
+  comps.forEach(c=>{
+    const all=[c.name].concat(c.parts||[]);
+    all.forEach(n=>{
+      const li=lineIndexFor(ls,n); if(li<0) return; const t=ls[li].trim().split(/\s+/); t[0]=nameMap.get(n.toLowerCase());
+      if(n[0].toUpperCase()==='K'){ t[1]=nameMap.get(t[1].toLowerCase())||t[1]; t[2]=nameMap.get(t[2].toLowerCase())||t[2]; out.push(t.join(' ')); return; }
+      nodeIdx(ls[li].trim().split(/\s+/)).forEach(i=>{ const key=t[i].toLowerCase(); const net=S.circ.nets.get(key); if(net&&(net.kind==='gnd'||net.kind==='rail')) return; if(!map.has(key)) map.set(key,(cnt.get(key)||0)>1?fresh():fresh()); t[i]=map.get(key); });
+      out.push(t.join(' '));
+    });
+    const h=S.hints[c.name.toLowerCase()]||{x:c.cx,y:c.cy,rot:c.o.rot,flip:(c.type==='OA'?c.o.swap:c.o.flip)?1:0,side:c.side};
+    const nn=nameMap.get(c.name.toLowerCase()); newNames.push(nn);
+    hints.push(`*@ ${nn} x=${h.x+dx} y=${h.y+dy} rot=${h.rot} flip=${h.flip?1:0} side=${h.side}`);
+  });
+  ls=insertBeforeMeta(ls,out); hints.forEach(h=>ls.push(h)); commitText(ls); return newNames;
+}
 /* ===== Draw mode UI: editor canvas, palette, tools, wiring ===== */
 const ES=3; // editor scale, mm per grid step (only for the on-screen editor; exports solve their own scale)
-const sn=v=>Math.round(v*2)/2;
+const sn=v=>$('tSnap')&&!$('tSnap').checked?Math.round(v*10)/10:Math.round(v*2)/2;
+S.multi=[];
 S.tool='sel'; S.pinSel=null; S.shSel=-1; S.zoom=1; S.view=null; S.light=false;
 function contentBox(){
   let b=null; const add=r=>{ b=b?[Math.min(b[0],r[0]),Math.min(b[1],r[1]),Math.max(b[2],r[2]),Math.max(b[3],r[3])]:r.slice(); };
-  if(S.circ) S.circ.comps.forEach(c=>add(rectW(c,SYM[c.type].cover)));
+  if(S.circ) S.circ.comps.forEach(c=>add(rectW(c,covOf(c))));
   S.shapes.forEach(s=>add(shBox(s))); return b;
 }
 function resetView(){
@@ -1238,7 +1357,7 @@ function resetView(){
   if(b){ w=Math.max(40,Math.ceil(b[2]-b[0])+8); h=Math.max(24,Math.ceil(b[3]-b[1])+8); cx=(b[0]+b[2])/2; cy=(b[1]+b[3])/2; }
   S.view=[Math.round(cx-w/2),Math.round(cy-h/2),Math.round(cx+w/2),Math.round(cy+h/2)];
 }
-const PINN={Q:['base','collector','emitter'],M:['gate','drain','source'],OA:['+ input','− input','output','V+','V−'],V:['+','−'],I:['+','−'],D:['anode','cathode']};
+const PINN={P:['wiper','end A','end B'],J:['gate','drain','source'],T:['primary 1','primary 2','secondary 1','secondary 2'],Q:['base','collector','emitter'],M:['gate','drain','source'],OA:['+ input','− input','output','V+','V−'],V:['+','−'],I:['+','−'],D:['anode','cathode']};
 function pinName(c,i){ return (PINN[c.type]||['1','2'])[i]||String(i+1); }
 function renderEditor(){
   const svg=$('sv'); const o=readOpts(); o.outline=false; o.fontObj=null;
@@ -1249,18 +1368,20 @@ function renderEditor(){
   const art=(S.circ&&S.R)?drawArt(S.circ,S.R,o,ES):''; S.fsG=o.fsG||o.fsMM/ES;
   let ov='';
   const circ=S.circ?S.circ.comps:[];
-  circ.forEach(c=>{ if(c.isPort) return; const r=rectW(c,SYM[c.type].cover);
+  circ.forEach(c=>{ if(c.isPort) return; const r=rectW(c,covOf(c));
     ov+=`<rect class="hit" data-c="${esc(c.name)}" x="${r[0]-0.5}" y="${r[1]-0.5}" width="${r[2]-r[0]+1}" height="${r[3]-r[1]+1}"/>`;
-    if(S.sel===c.name) ov+=`<rect class="selbox" stroke-width="0.1" x="${r[0]-0.5}" y="${r[1]-0.5}" width="${r[2]-r[0]+1}" height="${r[3]-r[1]+1}"/>`; });
+    if(S.multi.includes(c.name)) ov+=`<rect class="selbox" stroke-width="0.1" x="${r[0]-0.5}" y="${r[1]-0.5}" width="${r[2]-r[0]+1}" height="${r[3]-r[1]+1}"/>`;
+    else if(S.sel===c.name) ov+=`<rect class="selbox" stroke-width="0.1" x="${r[0]-0.5}" y="${r[1]-0.5}" width="${r[2]-r[0]+1}" height="${r[3]-r[1]+1}"/>`; });
   S.shapes.forEach((s,i)=>{
     const p=s.p;
     if(s.t==='text'){ const bx=shBox(s); ov+=`<rect class="shp shf" data-s="${i}" x="${f2(bx[0])}" y="${f2(bx[1])}" width="${f2(bx[2]-bx[0])}" height="${f2(bx[3]-bx[1])}"/>`; }
-    else if(s.t==='line') ov+=`<line class="shp" data-s="${i}" x1="${p[0]}" y1="${p[1]}" x2="${p[2]}" y2="${p[3]}" stroke-width="0.8"/>`;
+    else if(s.t==='line'||s.t==='arrow') ov+=`<line class="shp" data-s="${i}" x1="${p[0]}" y1="${p[1]}" x2="${p[2]}" y2="${p[3]}" stroke-width="0.8"/>`;
     else if(s.t==='rect') ov+=`<rect class="shp" data-s="${i}" x="${Math.min(p[0],p[2])}" y="${Math.min(p[1],p[3])}" width="${Math.abs(p[2]-p[0])}" height="${Math.abs(p[3]-p[1])}" stroke-width="0.8"/>`;
     else if(s.t==='circ') ov+=`<circle class="shp" data-s="${i}" cx="${p[0]}" cy="${p[1]}" r="${p[2]}" stroke-width="0.8"/>`;
     else ov+=`<polygon class="shp" data-s="${i}" points="${p[0]},${p[1]} ${p[2]},${p[3]} ${p[4]},${p[5]}" stroke-width="0.8"/>`;
     if(S.shSel===i){ const bx=shBox(s); ov+=`<rect class="selbox" stroke-width="0.1" x="${f2(bx[0]-0.4)}" y="${f2(bx[1]-0.4)}" width="${f2(bx[2]-bx[0]+0.8)}" height="${f2(bx[3]-bx[1]+0.8)}"/>`; }
   });
+  if(S.band){ const q=S.band; ov+=`<rect class="selbox" stroke-width="0.08" x="${Math.min(q[0],q[2])}" y="${Math.min(q[1],q[3])}" width="${Math.abs(q[2]-q[0])}" height="${Math.abs(q[3]-q[1])}" pointer-events="none"/>`; }
   if(S.tmp){ ov+=`<g stroke="#d9480f" stroke-width="${f2(o.lwMM/ES)}" fill="none" pointer-events="none">${shapesXml([S.tmp],o,o.fsMM/ES)}</g>`; }
   // pins
   let selNet=null; if(S.pinSel){ const pc=circ.find(c=>c.name===S.pinSel.c); if(pc) selNet=pinsW(pc)[S.pinSel.i].net; }
@@ -1288,7 +1409,8 @@ function updDrawBars(){
   const pb=$('pinbar'); pb.hidden=!(S.mode==='draw'&&S.pinSel);
   if(!pb.hidden){ const c=S.circ.comps.find(k=>k.name===S.pinSel.c); $('pinlab').textContent=c?`${c.name}: ${pinName(c,S.pinSel.i)}`:''; }
   $('shpbar').hidden=!(S.mode==='draw'&&S.shSel>=0&&S.shapes[S.shSel]);
-  if(!$('shpbar').hidden){ const s=S.shapes[S.shSel]; $('shDash').hidden=s.t==='text'; $('shRot').hidden=$('shFlip').hidden=(s.t==='text'||s.t==='circ'); $('shFlip').hidden=s.t!=='tri'; }
+  if(!$('shpbar').hidden){ const s=S.shapes[S.shSel]; $('shDash').hidden=s.t==='text'; $('shRot').hidden=(s.t==='text'||s.t==='circ'); $('shFlip').hidden=s.t!=='tri'; }
+  $('multibar').hidden=!(S.mode==='draw'&&S.multi.length>1);
   document.querySelectorAll('#tools button').forEach(b=>b.classList.toggle('on',b.dataset.tool===S.tool));
 }
 function dmsg(t){ $('dMsg').textContent=t||''; }
@@ -1305,18 +1427,27 @@ function drawDown(ev){
   if(el&&el.classList.contains('shp')){
     const i=+el.dataset.s; const [gx,gy]=toGrid(ev); S.sel=null; S.pinSel=null; S.shSel=i; S.sd={move:true,i,x:sn(gx),y:sn(gy),moved:false}; S.light=true;
     $('sv').setPointerCapture(ev.pointerId); render(); return true; }
-  if(el&&el.classList.contains('hit')){ if(S.shSel>=0||S.pinSel){ S.shSel=-1; S.pinSel=null; } return false; }
-  if(S.shSel>=0||S.pinSel||S.sel){ S.shSel=-1; S.pinSel=null; S.sel=null; render(); }
+  if(el&&el.classList.contains('hit')){
+    const nm=el.getAttribute('data-c'); S.shSel=-1; S.pinSel=null;
+    if(ev.shiftKey){ if(!S.multi.length&&S.sel) S.multi=[S.sel]; const k=S.multi.indexOf(nm); if(k>=0) S.multi.splice(k,1); else S.multi.push(nm); S.sel=S.multi.length===1?S.multi[0]:null; if(S.multi.length===1) S.multi=[]; S.light=true; render(); S.light=false; return true; }
+    if(S.multi.length>1&&S.multi.includes(nm)){
+      const [gx,gy]=toGrid(ev); const base={}; S.circ.comps.forEach(c=>{ if(S.multi.includes(c.name)) base[c.name]=[c.cx,c.cy]; });
+      S.sd={mmove:true,gx,gy,base,moved:false}; S.light=true; $('sv').setPointerCapture(ev.pointerId); return true; }
+    S.multi=[]; return false; }
+  if(S.shSel>=0||S.pinSel||S.sel||S.multi.length){ S.shSel=-1; S.pinSel=null; S.sel=null; S.multi=[]; }
+  const [bx,by]=toGrid(ev); S.sd={band:true,x0:bx,y0:by,moved:false}; S.band=null; $('sv').setPointerCapture(ev.pointerId); S.light=true; render();
   return true;
 }
 function drawMove(ev){
   if(S.pinSel){ const r=document.getElementById('rub'); if(r){ const [gx,gy]=toGrid(ev); r.setAttribute('x2',gx); r.setAttribute('y2',gy); } }
   const d=S.sd; if(!d) return false;
   const [gx,gy]=toGrid(ev); let x=sn(gx), y=sn(gy);
+  if(d.band){ if(Math.hypot(gx-d.x0,gy-d.y0)>0.4) d.moved=true; S.band=[d.x0,d.y0,gx,gy]; renderEditor(); return true; }
+  if(d.mmove){ const dx=Math.round(gx-d.gx), dy=Math.round(gy-d.gy); if(dx||dy||d.moved){ d.moved=true; for(const n in d.base){ const c=S.circ.comps.find(k=>k.name===n); if(c) setHint(c,{x:d.base[n][0]+dx,y:d.base[n][1]+dy}); } if(!S.raf) S.raf=requestAnimationFrame(()=>{ S.raf=0; recompute(false); renderEditor(); }); } return true; }
   if(d.create){
-    if(ev.shiftKey&&S.tool==='line'){ const dx=x-d.x0, dy=y-d.y0; if(Math.abs(dx)>Math.abs(dy)*2) y=d.y0; else if(Math.abs(dy)>Math.abs(dx)*2) x=d.x0; }
+    if(ev.shiftKey&&(S.tool==='line'||S.tool==='arrow')){ const dx=x-d.x0, dy=y-d.y0; if(Math.abs(dx)>Math.abs(dy)*2) y=d.y0; else if(Math.abs(dy)>Math.abs(dx)*2) x=d.x0; }
     const dash=$('tDash').checked?1:0;
-    if(S.tool==='line') S.tmp={t:'line',p:[d.x0,d.y0,x,y],dash};
+    if(S.tool==='line'||S.tool==='arrow') S.tmp={t:S.tool,p:[d.x0,d.y0,x,y],dash};
     else if(S.tool==='rect') S.tmp={t:'rect',p:[d.x0,d.y0,x,y],dash};
     else if(S.tool==='circ') S.tmp={t:'circ',p:[d.x0,d.y0,Math.max(0.5,sn(Math.hypot(x-d.x0,y-d.y0)))],dash};
     else if(S.tool==='tri') S.tmp={t:'tri',p:triFromDrag(d.x0,d.y0,x,y),dash};
@@ -1327,9 +1458,15 @@ function drawMove(ev){
 }
 function drawUp(){
   const d=S.sd; if(!d) return false; S.sd=null; S.light=false;
+  if(d.band){ const q=S.band; S.band=null;
+    if(q&&d.moved){ const x0=Math.min(q[0],q[2]),x1=Math.max(q[0],q[2]),y0=Math.min(q[1],q[3]),y1=Math.max(q[1],q[3]);
+      const hit=S.circ.comps.filter(c=>!c.isPort&&c.cx>=x0&&c.cx<=x1&&c.cy>=y0&&c.cy<=y1).map(c=>c.name);
+      if(hit.length>1){ S.multi=hit; S.sel=null; } else if(hit.length===1){ S.sel=hit[0]; S.multi=[]; } }
+    render(); return true; }
+  if(d.mmove){ if(d.moved){ writeHints(); recompute(false); } render(); return true; }
   if(d.create){
     const s=S.tmp; S.tmp=null; let ok=false;
-    if(s){ const p=s.p; ok=s.t==='circ'?true:s.t==='line'?(p[0]!==p[2]||p[1]!==p[3]):s.t==='tri'?(p[2]!==p[4]&&p[1]!==p[3]):(p[0]!==p[2]&&p[1]!==p[3]); }
+    if(s){ const p=s.p; ok=s.t==='circ'?true:(s.t==='line'||s.t==='arrow')?(p[0]!==p[2]||p[1]!==p[3]):s.t==='tri'?(p[2]!==p[4]&&p[1]!==p[3]):(p[0]!==p[2]&&p[1]!==p[3]); }
     if(ok){ S.shapes.push(s); S.shSel=S.shapes.length-1; S.tool='sel'; writeHints(); }
     render(); return true;
   }
@@ -1353,10 +1490,10 @@ $('shRot').onclick=()=>{ const s=S.shapes[S.shSel]; if(!s) return; rotShape(s); 
 $('shFlip').onclick=()=>{ const s=S.shapes[S.shSel]; if(!s) return; flipShape(s); writeHints(); render(); };
 $('bDelPart').onclick=()=>{ if(S.sel) deleteComp(S.sel); };
 /* --- palette --- */
-const PAL=[['R','Resistor'],['C','Capacitor'],['L','Inductor'],['D','Diode'],['LED','LED'],['V','DC source'],['VAC','AC source'],['I','Current source'],['QN','NPN'],['QP','PNP'],['MN','NMOS'],['MP','PMOS'],['OA','Op-amp'],['OA5','Op-amp, 5 pins']];
-const ICON={R:{type:'R'},C:{type:'C'},L:{type:'L'},D:{type:'D',kind:'d'},LED:{type:'D',kind:'led'},V:{type:'V'},VAC:{type:'V',ac:true},I:{type:'I'},QN:{type:'Q',pol:'n'},QP:{type:'Q',pol:'p'},MN:{type:'M',pol:'n'},MP:{type:'M',pol:'p'},OA:{type:'OA'},OA5:{type:'OA',pw:true}};
-function iconSvg(k){ const c={...ICON[k],o:{rot:0,flip:false,swap:false}}; const big=c.type==='OA';
-  return `<svg viewBox="${big?'-2.4 -2.4 4.8 4.8':'-2.4 -2.4 4.8 4.8'}" width="38" height="38" fill="none" stroke="currentColor" stroke-width="0.17" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${SYM[c.type].draw(c,{rbox:false}).replace(/fill="#000"/g,'fill="currentColor"')}</svg>`; }
+const PAL=[['R','Resistor'],['C','Capacitor'],['L','Inductor'],['D','Diode'],['LED','LED'],['V','DC source'],['VAC','AC source'],['I','Current source'],['QN','NPN'],['QP','PNP'],['MN','NMOS'],['MP','PMOS'],['OA','Op-amp'],['OA5','Op-amp, 5 pins'],['CP','Polarized C'],['POT','Potentiometer'],['SW','Switch'],['JN','N-JFET'],['JP','P-JFET'],['TR','Transformer'],['IC4','IC, 4 pins'],['IC8','IC, 8 pins']];
+const ICON={R:{type:'R'},C:{type:'C'},L:{type:'L'},D:{type:'D',kind:'d'},LED:{type:'D',kind:'led'},V:{type:'V'},VAC:{type:'V',ac:true},I:{type:'I'},QN:{type:'Q',pol:'n'},QP:{type:'Q',pol:'p'},MN:{type:'M',pol:'n'},MP:{type:'M',pol:'p'},OA:{type:'OA'},OA5:{type:'OA',pw:true},CP:{type:'C',polar:true},POT:{type:'P'},SW:{type:'W'},JN:{type:'J',pol:'n'},JP:{type:'J',pol:'p'},TR:{type:'T'},IC4:{type:'IC',nodes:[1,2,3,4]},IC8:{type:'IC',nodes:[1,2,3,4,5,6,7,8]}};
+function iconSvg(k){ const c={...ICON[k],o:{rot:0,flip:false,swap:false}}; const R=c.type==='IC'?icRows(c)+0.4:2.4;
+  return `<svg viewBox="${-R} ${-R} ${2*R} ${2*R}" width="38" height="38" fill="none" stroke="currentColor" stroke-width="${f2(0.17*R/2.4)}" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${SYM[c.type].draw(c,{rbox:false}).replace(/fill="#000"/g,'fill="currentColor"')}</svg>`; }
 $('pal').innerHTML=PAL.map(([k,l])=>`<button type="button" class="pitem" data-k="${k}" title="${l}: drag onto the grid, or click">${iconSvg(k)}<span>${l}</span></button>`).join('');
 function gridAt(cx,cy){ const g=$('root'); if(!g) return null; const pt=$('sv').createSVGPoint(); pt.x=cx; pt.y=cy; const p=pt.matrixTransform(g.getScreenCTM().inverse()); return [p.x,p.y]; }
 function freeSpot(){
@@ -1413,6 +1550,92 @@ function setMode(m){
 $('tabNet').onclick=()=>setMode('net'); $('tabDraw').onclick=()=>setMode('draw');
 $('bNew').onclick=()=>{ $('net').value='* New drawing\n'; S.sel=null; S.pinSel=null; S.shSel=-1; S.view=null; schedule(true); };
 $('ex').addEventListener('change',()=>{ S.view=null; S.pinSel=null; S.shSel=-1; });
+
+/* --- multi-select actions, duplicate, panel labels --- */
+function mapMulti(fn){ const cs=S.multi.map(n=>S.circ.comps.find(c=>c.name===n)).filter(Boolean); freezeLayout(); fn(cs); writeHints(); recompute(false); render(); }
+const avg=a=>Math.round(a.reduce((x,y)=>x+y,0)/a.length);
+$('mRow').onclick=()=>mapMulti(cs=>{ const y=avg(cs.map(c=>c.cy)); cs.forEach(c=>setHint(c,{x:c.cx,y})); });
+$('mCol').onclick=()=>mapMulti(cs=>{ const x=avg(cs.map(c=>c.cx)); cs.forEach(c=>setHint(c,{x,y:c.cy})); });
+$('mEvenH').onclick=()=>mapMulti(cs=>{ cs.sort((a,b)=>a.cx-b.cx); const a=cs[0].cx,b=cs[cs.length-1].cx; cs.forEach((c,i)=>setHint(c,{x:Math.round(a+(b-a)*i/(cs.length-1)),y:c.cy})); });
+$('mEvenV').onclick=()=>mapMulti(cs=>{ cs.sort((a,b)=>a.cy-b.cy); const a=cs[0].cy,b=cs[cs.length-1].cy; cs.forEach((c,i)=>setHint(c,{x:c.cx,y:Math.round(a+(b-a)*i/(cs.length-1))})); });
+$('mRot').onclick=()=>mapMulti(cs=>cs.forEach(c=>setHint(c,{x:c.cx,y:c.cy,rot:(c.o.rot+90)%360})));
+$('mDup').onclick=()=>dupSel();
+$('mDel').onclick=()=>{ const ns=S.multi.slice(); S.multi=[]; ns.forEach(n=>{ if(S.circ.comps.some(c=>c.name===n)) deleteComp(n); }); };
+function dupSel(){ const ns=S.multi.length>1?S.multi.slice():(S.sel?[S.sel]:[]); if(!ns.length) return; const nn=duplicateParts(ns,3,3); S.multi=nn.length>1?nn:[]; S.sel=nn.length===1?nn[0]:null; render(); }
+$('bDup').onclick=dupSel;
+$('bPanel').onclick=()=>{ const used=S.shapes.filter(s=>s.t==='text'&&/^\([a-z]\)$/.test(s.txt)).length; const b=contentBox()||[0,0,10,10];
+  S.shapes.push({t:'text',x:Math.round(b[0]),y:Math.round(b[1])-1,txt:'('+String.fromCharCode(97+used%26)+')'}); S.shSel=S.shapes.length-1; writeHints(); render(); };
+window.addEventListener('keydown',e=>{
+  const tag=(e.target.tagName||'').toLowerCase(); if(tag==='input'||tag==='textarea'||tag==='select'||S.mode!=='draw') return;
+  if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='d'){ e.preventDefault(); dupSel(); }
+  else if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='c'){ S.clip=S.multi.length>1?S.multi.slice():(S.sel?[S.sel]:[]); }
+  else if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='v'){ if(S.clip&&S.clip.length){ e.preventDefault(); const nn=duplicateParts(S.clip,3,3); S.multi=nn.length>1?nn:[]; S.sel=nn.length===1?nn[0]:null; S.clip=nn; render(); } }
+  else if((e.key==='Delete'||e.key==='Backspace')&&S.multi.length>1){ e.preventDefault(); $('mDel').click(); }
+});
+/* ===== Style presets, pre-export check, share link, figures/project ===== */
+const STYLES={ieee:{font:'serif',fs:8,lw:0.75},els:{font:'sans',fs:8,lw:0.75},spr:{font:'sans',fs:8,lw:0.75},nat:{font:'sans',fs:7,lw:0.5},the:{font:'serif',fs:10,lw:0.75}};
+$('style').addEventListener('change',()=>{ const v=STYLES[$('style').value]; if(!v) return; $('font').value=v.font; $('fs').value=v.fs; $('lw').value=v.lw; schedule(false); });
+['font','fs','lw'].forEach(id=>$(id).addEventListener('input',()=>{ const v=STYLES[$('style').value]; if(v&&(String(v.fs)!==$('fs').value||String(v.lw)!==$('lw').value||v.font!==$('font').value)) $('style').value=''; }));
+
+/* pre-export check */
+function renderCheck(o,s){
+  const box=$('check'); const it=[]; const add=(k,t)=>it.push(`<div class="ck ${k}"><span>${k==='ok'?'✓':k==='bad'?'✕':'!'}</span><span>${t}</span></div>`);
+  const fsPt=parseFloat($('fs').value), lwPt=parseFloat($('lw').value);
+  if(fsPt<6) add('bad',`Text is ${fsPt} pt, which is too small to read in print.`); else if(fsPt<7) add('no',`Text is ${fsPt} pt. Most journals want 7 pt or more.`); else add('ok',`Text is ${fsPt} pt at print size.`);
+  if(lwPt<0.25) add('bad',`Lines are ${lwPt} pt, below the usual 0.25 pt minimum.`); else if(lwPt<0.5) add('no',`Lines are ${lwPt} pt. Some journals want 0.5 pt or more.`); else add('ok',`Lines are ${lwPt} pt at print size.`);
+  add(o.fit?'ok':'no',o.fit?`Width is exactly ${f2(S.wMM).toFixed(1)} mm.`:`Width is ${f2(S.wMM).toFixed(1)} mm, narrower than the column because Natural size is on.`);
+  if(s<1.7) add('no',`Symbols are small (${s.toFixed(2)} mm per grid step). Use a wider column or Natural size off.`); else add('ok','Symbols are a readable size.');
+  if(S.R&&S.R.failed) add('no',`${S.R.failed} wire${S.R.failed>1?'s':''} could not be routed cleanly. Move a part to make room.`); else add('ok','All wires are routed.');
+  const lone=S.circ?[...S.circ.nets.values()].filter(n=>n.kind==='sig'&&n.label[0]==='_'&&n.pins.filter(p=>!p.c.isPort).length<2).length:0;
+  if(lone) add('no',`${lone} pin${lone>1?'s are':' is'} not connected to anything.`);
+  const nw=(S.parsed&&S.parsed.warnings||[]).filter(w=>!/connected to only one part/.test(w.msg)||true).length;
+  if(nw&&S.mode!=='draw') add('no',`${nw} note${nw>1?'s':''} about the netlist (see the list under the netlist box).`);
+  add(o.outline?'ok':'no',o.outline?'Text is converted to outlines, so fonts look the same everywhere.':'Text is live text. The viewer needs the font installed, or turn on Text as outlines.');
+  if(S.hMM>230) add('no',`Height is ${f2(S.hMM).toFixed(0)} mm, taller than most journal pages allow once a caption is added.`);
+  box.innerHTML='<h4>Before you export</h4>'+it.join(''); box.hidden=false;
+}
+
+/* share link */
+function b64e(str){ const b=new TextEncoder().encode(str); let s=''; b.forEach(x=>s+=String.fromCharCode(x)); return btoa(s).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,''); }
+function b64d(t){ t=t.replace(/-/g,'+').replace(/_/g,'/'); while(t.length%4) t+='='; const s=atob(t); return new TextDecoder().decode(Uint8Array.from(s,c=>c.charCodeAt(0))); }
+const OPT_IDS=['paper','custw','sizeMode','lw','fs','font','rstyle','style'], OPT_CK=['oNames','oVals','oRails','oPorts','oOutline','oBg'];
+function snap(){ const o={}; OPT_IDS.forEach(i=>o[i]=$(i).value); OPT_CK.forEach(i=>o[i]=$(i).checked?1:0); return {net:$('net').value,o}; }
+function loadSnap(st){ $('net').value=st.net; OPT_IDS.forEach(i=>{ if(st.o&&st.o[i]!=null) $(i).value=st.o[i]; }); OPT_CK.forEach(i=>{ if(st.o&&st.o[i]!=null) $(i).checked=!!st.o[i]; });
+  $('paper').dispatchEvent(new Event('change')); S.sel=null; S.pinSel=null; S.shSel=-1; S.multi=[]; S.view=null; recompute(true); render(); }
+$('bShare').onclick=async()=>{
+  let url=''; try{ const base=(location.protocol==='http:'||location.protocol==='https:')?location.origin+location.pathname:''; url=base+'#d='+b64e(JSON.stringify(snap())); }catch(e){ url='#d='+b64e(JSON.stringify(snap())); }
+  const bx=$('shareBox'); bx.value=url; bx.hidden=false;
+  try{ await navigator.clipboard.writeText(url); flash($('bShare'),'Link copied'); }catch(e){ bx.focus(); bx.select(); flash($('bShare'),'Select and copy'); }
+};
+function loadFromHash(){ try{ const m=/^#d=(.+)$/.exec(location.hash); if(!m) return; loadSnap(JSON.parse(b64d(m[1]))); }catch(e){ console.warn('bad share link'); } }
+
+/* figures / project */
+const FIGS=[{name:'Figure 1'}]; let FI=0;
+function figRefresh(){ $('figSel').innerHTML=FIGS.map((f,i)=>`<option value="${i}">${i+1}. ${esc(f.name)}</option>`).join(''); $('figSel').value=FI; $('figTitle').value=FIGS[FI].name; }
+function figGo(i){ FIGS[FI].state=snap(); FI=i; if(FIGS[i].state) loadSnap(FIGS[i].state); else { $('net').value='* New drawing\n'; S.view=null; S.shapes=[]; recompute(true); render(); } figRefresh(); }
+$('figSel').onchange=()=>figGo(+$('figSel').value);
+$('figAdd').onclick=()=>{ FIGS[FI].state=snap(); FIGS.push({name:'Figure '+(FIGS.length+1),state:{net:'* New drawing\n',o:snap().o}}); figGo(FIGS.length-1); $('figMsg').textContent='Added. Use the Draw tab or paste a netlist.'; };
+$('figDel').onclick=()=>{ if(FIGS.length<2){ $('figMsg').textContent='A project needs at least one figure.'; return; } FIGS.splice(FI,1); FI=Math.min(FI,FIGS.length-1); loadSnap(FIGS[FI].state||snap()); figRefresh(); };
+$('figTitle').addEventListener('input',()=>{ FIGS[FI].name=$('figTitle').value||'Figure '+(FI+1); const o=$('figSel').options[FI]; if(o) o.textContent=(FI+1)+'. '+FIGS[FI].name; S.figName=FIGS[FI].name; });
+$('projSave').onclick=()=>{ FIGS[FI].state=snap(); save('circuit-project.json',JSON.stringify({v:1,figs:FIGS,cur:FI},null,1),$('projSave')); };
+$('projOpen').onclick=()=>$('projFile').click();
+$('projFile').onchange=async()=>{ const f=$('projFile').files[0]; if(!f) return; try{ const j=JSON.parse(await f.text()); if(!j.figs||!j.figs.length) throw 0; FIGS.length=0; j.figs.forEach(x=>FIGS.push(x)); FI=Math.min(j.cur||0,FIGS.length-1); loadSnap(FIGS[FI].state); figRefresh(); $('figMsg').textContent='Opened '+FIGS.length+' figure'+(FIGS.length>1?'s':'')+'.'; }catch(e){ $('figMsg').textContent='That file is not a project saved by this tool.'; } $('projFile').value=''; };
+$('projPdf').onclick=async()=>{
+  const btn=$('projPdf'); if(!(window.jspdf&&window.svg2pdf)){ flash(btn,'PDF tools did not load'); return; }
+  FIGS[FI].state=snap(); const keep=FI, cur=snap(); let doc=null;
+  try{
+    for(let i=0;i<FIGS.length;i++){
+      loadSnap(FIGS[i].state); const W=S.wMM,H=S.hMM; if(!S.svgStr) continue;
+      const host=document.createElement('div'); host.style.cssText='position:fixed;left:-9999px;top:0;background:#fff'; host.innerHTML=S.svgStr.replace(/width="([\d.]+)mm" height="([\d.]+)mm"/,'width="$1" height="$2"'); document.body.appendChild(host);
+      const {jsPDF}=window.jspdf; if(!doc) doc=new jsPDF({unit:'mm',format:[W,H],orientation:W>H?'l':'p'}); else doc.addPage([W,H],W>H?'l':'p');
+      await window.svg2pdf.svg2pdf(host.firstChild,doc,{x:0,y:0,width:W,height:H}); host.remove();
+    }
+    loadSnap(cur); FI=keep;
+    if(doc) save('circuit-figures.pdf',doc.output('blob'),btn); else flash(btn,'Nothing to export');
+  }catch(e){ console.error(e); loadSnap(cur); flash(btn,'PDF failed'); }
+};
+figRefresh();
+loadFromHash();
 </script>
 
 </body>

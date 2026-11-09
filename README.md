@@ -50,6 +50,23 @@ Everything runs in your browser. Your netlist is never uploaded anywhere.
 - **Other programs:** look for an export or "netlist" command and choose SPICE. Menu names change between versions.
 - **No simulator:** use **Add a part** and fill in the form.
 
+## Draw mode
+
+If you do not have a netlist, open the **Draw** tab.
+
+- Drag a part from the palette onto the grid, or click it. Parts include R, C, polarized C, L, diode, LED, DC and AC sources, current source, NPN, PNP, NMOS, PMOS, N- and P-JFET, op-amps, potentiometer, switch, transformer and ICs.
+- Click a pin, then another pin, to wire them. A pin can also be set to **Ground**, given a **Name net** such as `out`, or disconnected.
+- Drag on empty space to select several parts (or Shift+click). Then align them, space them evenly, rotate, duplicate or delete them. Ctrl+D duplicates, Ctrl+Z and Ctrl+Y undo and redo.
+- Shapes: line, arrow, circle, triangle, rectangle and text, with dashed lines. **Panel label** adds (a), (b) and so on.
+- Your drawing is saved as a netlist, so you can switch to the Netlist tab to copy it. Shapes are saved as `*#` comment lines.
+
+## Other tools
+
+- **Journal style** sets the font, text size and line weight to typical values for IEEE, Elsevier, Springer, Nature-style or a thesis.
+- **Before you export** is a checklist under the preview: text and line size, width, symbol size, unrouted wires, loose pins.
+- **Share link** copies a link that opens your circuit with its settings (it works when the tool is on a web address).
+- **Figures and project** keeps several circuits in one project file and exports all of them as one PDF, one page per figure.
+
 ## Supported parts
 
 | Letter | Part | Netlist line |
@@ -63,8 +80,14 @@ Everything runs in your browser. Your netlist is never uploaded anywhere.
 | Q | NPN or PNP transistor | `Q1 c b e 2N3904` (collector, base, emitter) |
 | M | NMOS or PMOS transistor | `M1 d g s b NMOS` (drain, gate, source, body) |
 | X | Op-amp | `X1 in+ in- out model` or `X1 in+ in- v+ v- out model` |
+| X | Generic IC block (any other pin count) | `X1 n1 n2 n3 n4 IC` |
+| J | JFET (N or P) | `J1 d g s 2N5457` |
+| S | Switch | `S1 a b 0 0 SW` |
+| K | Transformer, from two inductors | `L1 a b 10m`, `L2 c d 10m`, `K1 L1 L2 0.99` |
+| C | Polarized capacitor | `C1 a b 10u ; pol` (a is the + side) |
+| R | Potentiometer | `R1 a b 10k ; pot wiper_node` |
 
-Other element types (dependent sources E, F, G, H, and other subcircuits) are skipped, and the tool tells you which lines it left out.
+Other element types (dependent sources E, F, G, H) are skipped, and the tool tells you which lines it left out.
 
 ### Conventions the tool follows
 
@@ -90,8 +113,8 @@ The layout is placed automatically with a set of rules, and it works best on amp
 
 - It draws well: RC and LC filters, single and two-stage transistor amplifiers, op-amp amplifiers (inverting, summing), a MOSFET stage, a current mirror, and a rectifier.
 - It is weaker on a differential pair, a Sallen-Key filter, a non-inverting amplifier and a buck converter. The connections are correct, but the placement is untidy and may need some dragging.
-- Negative supply rails are drawn at the top, where the usual convention is the bottom.
-- There are no symbols yet for transformers, switches, potentiometers, polarized capacitors, JFETs, or generic ICs.
+- Wires are routed automatically. You can move parts, but not drag individual wire corners.
+- LTspice `.asc` files cannot be imported. Use View, then SPICE Netlist in LTspice instead.
 - The tool does not simulate anything. It only draws.
 
 ## Running it yourself
